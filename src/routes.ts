@@ -51,6 +51,7 @@ export const setupRoutes = (app: Express) => {
 
     const filterQuery = filterClauses.join(" AND ");
 
+    const startTime = Date.now();
     try {
       const index = client.index(INDEX_NAME);
       const searchResults = await index.search(
@@ -58,9 +59,17 @@ export const setupRoutes = (app: Express) => {
         filterQuery ? { filter: filterQuery } : {}
       );
       const ids = searchResults.hits.map((hit: any) => hit.Id);
+      const elapsedMs = Date.now() - startTime;
+      logger.info(
+        `Search q="${query}"${
+          filterQuery ? ` filter="${filterQuery}"` : ""
+        } -> ${ids.length} hits in ${elapsedMs}ms`
+      );
       res.json({ ids });
     } catch (error: any) {
-      logger.error(`MeiliSearch error during search: ${error.message}`);
+      logger.error(
+        `MeiliSearch error during search q="${query}": ${error.message}`
+      );
       res.status(500).json({ error: "An error occurred during the search" });
     }
   });
