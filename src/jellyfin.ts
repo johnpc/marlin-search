@@ -60,7 +60,7 @@ export const scrapeJellyfin = async (): Promise<{
             Limit: batchSize,
             IncludeItemTypes: type,
             fields:
-              "Id,Name,Type,MediaType,IsFolder,Container,ProductionYear,OriginalTitle,Overview,CriticRating,OfficialRating,Genres,Studios,People,Taglines,RunTimeTicks",
+              "Id,Name,Type,MediaType,IsFolder,Container,ProductionYear,OriginalTitle,Overview,CriticRating,OfficialRating,Genres,Studios,People,Taglines,RunTimeTicks,Artists,AlbumArtist,AlbumArtists,Album,AlbumId,ArtistItems,IndexNumber,ParentIndexNumber",
           },
           headers,
           timeout: 30000,
@@ -90,6 +90,17 @@ export const scrapeJellyfin = async (): Promise<{
           People: item.People,
           Taglines: item.Taglines,
           RunTimeTicks: item.RunTimeTicks,
+          // Music-specific metadata. Present only for Audio/MusicAlbum/MusicArtist
+          // items; left undefined (and thus omitted) for other media types.
+          Artists: item.Artists,
+          AlbumArtist: item.AlbumArtist,
+          AlbumArtists: Array.isArray(item.AlbumArtists)
+            ? item.AlbumArtists.map((a: any) => a?.Name).filter(Boolean)
+            : undefined,
+          Album: item.Album,
+          AlbumId: item.AlbumId,
+          IndexNumber: item.IndexNumber,
+          ParentIndexNumber: item.ParentIndexNumber,
         }));
 
         items.push(...filteredItems);

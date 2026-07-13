@@ -25,10 +25,31 @@ export const setupRoutes = (app: Express) => {
       includeItemTypes = [];
     }
 
-    const filterQuery =
-      includeItemTypes.length > 0
-        ? includeItemTypes.map((type) => `Type = '${type}'`).join(" OR ")
-        : "";
+    // Escape single quotes so values can't break out of the filter string.
+    const quote = (value: string) => `'${value.replace(/'/g, "\\'")}'`;
+
+    const filterClauses: string[] = [];
+
+    if (includeItemTypes.length > 0) {
+      filterClauses.push(
+        "(" +
+          includeItemTypes
+            .map((type) => `Type = ${quote(String(type))}`)
+            .join(" OR ") +
+          ")"
+      );
+    }
+
+    // Optional music filters: narrow results to a given album/artist.
+    const album = req.query.album as string | undefined;
+    const albumArtist = req.query.albumArtist as string | undefined;
+    const artist = req.query.artist as string | undefined;
+
+    if (album) filterClauses.push(`Album = ${quote(album)}`);
+    if (albumArtist) filterClauses.push(`AlbumArtist = ${quote(albumArtist)}`);
+    if (artist) filterClauses.push(`Artists = ${quote(artist)}`);
+
+    const filterQuery = filterClauses.join(" AND ");
 
     try {
       const index = client.index(INDEX_NAME);

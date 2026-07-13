@@ -35,6 +35,11 @@ export const ensureIndexExists = async () => {
       "IsFolder",
       "Container",
       "OfficialRating",
+      // Music: allow narrowing results to a specific album/artist.
+      "Album",
+      "AlbumId",
+      "AlbumArtist",
+      "Artists",
     ]);
     logger.info("Updated filterable attributes.");
 
@@ -43,6 +48,9 @@ export const ensureIndexExists = async () => {
       "ProductionYear",
       "CriticRating",
       "RunTimeTicks",
+      // Music: allow ordering tracks by disc/track number.
+      "ParentIndexNumber",
+      "IndexNumber",
     ]);
     logger.info("Updated sortable attributes.");
   } catch (e: any) {

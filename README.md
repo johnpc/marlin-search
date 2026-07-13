@@ -14,6 +14,19 @@ After installation you can search your Jellyfin library via Marlin by using GET 
 
 The results constist of Jellyfin item IDs, which you can use with the Jellyfin API to get more detailed information about each media item.
 
+### Music library support
+
+Marlin indexes your music library alongside movies and shows. Artists (`MusicArtist`), albums (`MusicAlbum`) and tracks (`Audio`) are all indexed, including music-specific metadata such as the track artists, album artist, album name, and disc/track numbers. This means a query like `/search?q=miles davis` will match artists, albums and individual tracks.
+
+You can narrow music searches with optional query parameters:
+
+- `album` - only return items belonging to the given album name.
+- `albumArtist` - only return items whose album artist matches.
+- `artist` - only return items performed by the given artist.
+- `includeItemTypes` - restrict results to specific Jellyfin item types (e.g. `Audio`, `MusicAlbum`, `MusicArtist`). Repeat the parameter to allow multiple types.
+
+Example: `GET /search?q=blue&includeItemTypes=MusicAlbum&artist=Miles%20Davis`
+
 ```json
 "ids" = [
    "1234567890",
