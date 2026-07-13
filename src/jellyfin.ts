@@ -8,13 +8,38 @@ import {
 import { logger } from "./logger";
 import { client } from "./meilisearch";
 
+// Retry a request a few times on transient failures (e.g. a 502 from a
+// reverse proxy in front of Jellyfin) with exponential backoff. Without
+// this, a single blip aborts the entire scrape.
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  description: string,
+  attempts = 4
+): Promise<T> => {
+  let lastError: any;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      if (attempt < attempts) {
+        const delayMs = 1000 * 2 ** (attempt - 1);
+        logger.warn(
+          `${description} failed (attempt ${attempt}/${attempts}): ${error.message}. Retrying in ${delayMs}ms...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
+};
+
 export const scrapeJellyfin = async (): Promise<{
   status: string;
   message: string;
 }> => {
   const headers = { "X-Emby-Token": JELLYFIN_API_KEY! };
   const batchSize = BATCH_SIZE || 1000;
-  const items = [];
   const allowedTypes = new Set([
     "Movie",
     "Series",
@@ -28,22 +53,29 @@ export const scrapeJellyfin = async (): Promise<{
     for (const type of allowedTypes) {
       logger.info(`Fetching items of type ${type} from Jellyfin...`);
 
-      const totalItemsResponse = await axios.get(`${JELLYFIN_URL}/Items`, {
-        params: {
-          Recursive: true,
-          StartIndex: 0,
-          Limit: 1,
-          IncludeItemTypes: type,
-        },
-        headers,
-        timeout: 30000,
-      });
+      const totalItemsResponse = await withRetry(
+        () =>
+          axios.get(`${JELLYFIN_URL}/Items`, {
+            params: {
+              Recursive: true,
+              StartIndex: 0,
+              Limit: 1,
+              IncludeItemTypes: type,
+            },
+            headers,
+            timeout: 30000,
+          }),
+        `Fetching total count for type ${type}`
+      );
 
       const totalItems = totalItemsResponse.data.TotalRecordCount;
       const totalBatches = Math.ceil(totalItems / batchSize);
       logger.info(
         `Total ${type} items found: ${totalItems}. Fetching in ${totalBatches} batches of ${batchSize}...`
       );
+
+      let addedForType = 0;
+      const meiliIndex = client.index(INDEX_NAME);
 
       for (let index = 0; index < totalBatches; index++) {
         const startIndex = index * batchSize;
@@ -53,18 +85,22 @@ export const scrapeJellyfin = async (): Promise<{
           }/${totalBatches} of type ${type} starting at index ${startIndex}...`
         );
 
-        const response = await axios.get(`${JELLYFIN_URL}/Items`, {
-          params: {
-            Recursive: true,
-            StartIndex: startIndex,
-            Limit: batchSize,
-            IncludeItemTypes: type,
-            fields:
-              "Id,Name,Type,MediaType,IsFolder,Container,ProductionYear,OriginalTitle,Overview,CriticRating,OfficialRating,Genres,Studios,People,Taglines,RunTimeTicks,Artists,AlbumArtist,AlbumArtists,Album,AlbumId,ArtistItems,IndexNumber,ParentIndexNumber",
-          },
-          headers,
-          timeout: 30000,
-        });
+        const response = await withRetry(
+          () =>
+            axios.get(`${JELLYFIN_URL}/Items`, {
+              params: {
+                Recursive: true,
+                StartIndex: startIndex,
+                Limit: batchSize,
+                IncludeItemTypes: type,
+                fields:
+                  "Id,Name,Type,MediaType,IsFolder,Container,ProductionYear,OriginalTitle,Overview,CriticRating,OfficialRating,Genres,Studios,People,Taglines,RunTimeTicks,Artists,AlbumArtist,AlbumArtists,Album,AlbumId,ArtistItems,IndexNumber,ParentIndexNumber",
+              },
+              headers,
+              timeout: 30000,
+            }),
+          `Fetching batch ${index + 1}/${totalBatches} of type ${type}`
+        );
 
         logger.info(
           `Batch ${
@@ -103,20 +139,20 @@ export const scrapeJellyfin = async (): Promise<{
           ParentIndexNumber: item.ParentIndexNumber,
         }));
 
-        items.push(...filteredItems);
+        // Index each batch as it arrives so that a later failure never
+        // discards progress already made for this type.
+        if (filteredItems.length > 0) {
+          await withRetry(
+            () => meiliIndex.addDocuments(filteredItems),
+            `Adding batch ${index + 1}/${totalBatches} of type ${type} to MeiliSearch`
+          );
+          addedForType += filteredItems.length;
+        }
       }
 
       logger.info(
-        `Finished fetching all batches for type ${type}, found ${items.length} items. Now adding to MeiliSearch...`
+        `Finished type ${type}: added ${addedForType} items to MeiliSearch.`
       );
-
-      const index = client.index(INDEX_NAME);
-      await index.addDocuments(items);
-      logger.info(
-        `Added ${items.length} items of type ${type} to MeiliSearch.`
-      );
-
-      items.length = 0;
     }
 
     return {
