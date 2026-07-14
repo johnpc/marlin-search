@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import { PORT } from "./config";
 import { logger } from "./logger";
 import { ensureIndexExists } from "./meilisearch";
@@ -7,6 +8,8 @@ import { setupRoutes } from "./routes";
 import { SCRAPE_INTERVAL_MINUTES } from "./config";
 
 const app = express();
+// Allow all origins so browser-based clients on any domain can call the API.
+app.use(cors());
 app.use(express.json());
 
 setupRoutes(app);
