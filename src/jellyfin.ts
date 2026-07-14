@@ -47,6 +47,7 @@ export const scrapeJellyfin = async (): Promise<{
     "MusicArtist",
     "MusicAlbum",
     "Audio",
+    "Playlist",
   ]);
 
   try {
