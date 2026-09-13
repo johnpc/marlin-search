@@ -12,7 +12,12 @@ export const scrapeJellyfin = async (): Promise<{
   status: string;
   message: string;
 }> => {
-  const headers = { "X-Emby-Token": JELLYFIN_API_KEY! };
+  // Jellyfin 12 disabled the legacy X-Emby-Token / X-MediaBrowser-Token headers
+  // and the ?api_key= query param (all return 401). Only the MediaBrowser
+  // Authorization scheme is accepted.
+  const headers = {
+    Authorization: `MediaBrowser Token="${JELLYFIN_API_KEY!}"`,
+  };
   const batchSize = BATCH_SIZE || 1000;
   const items = [];
   const allowedTypes = new Set([
